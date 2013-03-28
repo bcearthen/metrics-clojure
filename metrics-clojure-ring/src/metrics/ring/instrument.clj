@@ -8,6 +8,11 @@
   (when-let [metric (metric-map k)]
     (mark! metric)))
 
+(defn- get-timer [metric-map k]
+  (if-let [metric (metric-map k)]
+    metric
+    (metric-map :other)))
+
 (defn instrument
   "Instrument a ring handler.
 
@@ -27,20 +32,23 @@
                 :post    (timer ["ring" "handling-time" "POST"])
                 :head    (timer ["ring" "handling-time" "HEAD"])
                 :delete  (timer ["ring" "handling-time" "DELETE"])
-                :options (timer ["ring" "handling-time" "OPTIONS"])}
+                :options (timer ["ring" "handling-time" "OPTIONS"])
+                :patch   (timer ["ring" "handling-time" "PATCH"])
+                :other   (timer ["ring" "handling-time" "OTHER"])} ; unknown request methods
          request-methods {:get     (meter ["ring" "requests" "rate.GET"] "requests")
                           :put     (meter ["ring" "requests" "rate.PUT"] "requests")
                           :post    (meter ["ring" "requests" "rate.POST"] "requests")
                           :head    (meter ["ring" "requests" "rate.HEAD"] "requests")
                           :delete  (meter ["ring" "requests" "rate.DELETE"] "requests")
-                          :options (meter ["ring" "requests" "rate.OPTIONS"] "requests")}]
+                          :options (meter ["ring" "requests" "rate.OPTIONS"] "requests")
+                          :patch   (meter ["ring" "requests" "rate.PATCH"] "requests")}]
      (fn [request]
        (inc! active-requests)
        (try
          (let [request-method (:request-method request)]
            (mark! requests)
            (mark-in! request-methods request-method)
-           (let [resp (time! (times request-method)
+           (let [resp (time! (get-timer times request-method)
                              (handler request))
                  status-code (or (:status resp) 404)]
              (mark! responses)
